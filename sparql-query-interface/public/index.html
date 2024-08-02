@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pantalla de Consultas - SPARQL Query [Data Scopus - ESPE]</title>
+  <style>
+    body {
+      font-family: 'Arial', sans-serif;
+      background-color: #f4f4f9;
+      margin: 0;
+      padding: 0;
+    }
+
+    .container {
+      max-width: 800px;
+      margin: 50px auto;
+      padding: 20px;
+      background-color: #fff;
+      box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+      border-radius: 8px;
+    }
+
+    h1 {
+      text-align: center;
+      color: #333;
+    }
+
+    .results {
+      margin-top: 20px;
+    }
+
+    .result-item {
+      cursor: pointer;
+      margin-bottom: 5px;
+      padding: 10px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      background-color: #f9f9f9;
+    }
+
+    .result-item:hover {
+      background-color: #f1f1f1;
+    }
+
+    .details {
+      display: none;
+      margin-top: 20px;
+      padding: 10px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      background-color: #fff;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Pantalla de Consultas - SPARQL Query [Data Scopus - ESPE]</h1>
+    <div class="results" id="results"></div>
+    <div class="details" id="details">
+      <h2>Detalles del Documento</h2>
+      <div id="detail-content"></div>
+      <button onclick="closeDetails()">Cerrar</button>
+    </div>
+  </div>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', async () => {
+      const query = `
+        PREFIX schema: <http://schema.org/>
+        PREFIX vivo: <http://vivoweb.org/ontology/core#>
+        SELECT ?article ?title ?authorName ?year WHERE {
+          ?article a vivo:AcademicArticle ;
+                   schema:name ?title ;
+                   vivo:relatedBy ?authorship ;
+                   schema:datePublished ?year .
+          ?authorship vivo:relates ?author .
+          ?author schema:name ?authorName .
+        } LIMIT 10`;
+
+      const response = await fetch('/sparql', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ query }),
+      });
+      const results = await response.json();
+      displayResults(results);
+    });
+
+    function displayResults(results) {
+      const resultContainer = document.getElementById('results');
+      resultContainer.innerHTML = '';
+      results.results.bindings.forEach(result => {
+        const documentId = result.article.value;
+        const title = result.title.value;
+        const year = result.year.value;
+        const authors = results.results.bindings
+          .filter(r => r.article.value === documentId)
+          .map(r => r.authorName.value)
+          .join(', ');
+
+        const resultItem = document.createElement('div');
+        resultItem.className = 'result-item';
+        resultItem.innerHTML = `<strong>${title}</strong> (${year})<br><em>${authors}</em>`;
+        resultItem.onclick = () => showDetails(documentId);
+        resultContainer.appendChild(resultItem);
+      });
+    }
+
+    async function showDetails(documentId) {
+      const response = await fetch('/details', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ documentId }),
+      });
+      const details = await response.json();
+      displayDetails(details);
+    }
+
+    function displayDetails(details) {
+      const detailView = document.getElementById('details');
+      const detailContent = document.getElementById('detail-content');
+      const detail = details.results.bindings[0];
+      detailContent.innerHTML = `
+        <p><strong>Título:</strong> ${detail.title.value}</p>
+        <p><strong>Año:</strong> ${detail.year.value}</p>
+        <p><strong>Autores:</strong> ${details.results.bindings.map(d => d.authorName.value).join(', ')}</p>
+        <p><strong>Resumen:</strong> ${detail.abstract.value}</p>
+      `;
+      detailView.style.display = 'block';
+    }
+
+    function closeDetails() {
+      const detailView = document.getElementById('details');
+      detailView.style.display = 'none';
+    }
+  </script>
+</body>
+</html>
